@@ -1,6 +1,6 @@
 # Variational Autoencoder
 
-Implementation of [Auto-Encoding Variational Bayes](https://arxiv.org/abs/1312.6114)
+Implementation of [Auto-Encoding Variational Bayes](https://arxiv.org/abs/1312.6114) in PyTorch
 
 ### Reference:
 * [PyTorch official example code](https://github.com/pytorch/examples/blob/master/vae)
