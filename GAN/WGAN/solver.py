@@ -129,10 +129,10 @@ class Solver(object):
             self.fixed_images = x # for debugging
             self.fixed_noise = z # for debugging
 
-            real_images = self.fixed_images.view(batch_size, 1, 28, 28)
+            real_images = self.fixed_images.view(batch_size, 1, 28, 28).data
             real_image_path = os.path.join(self.config.image_log_path, 'real_images.png')
             print('Save real images at %s' % (real_image_path))
-            save_image(real_images.data, real_image_path)
+            save_image(real_images, real_image_path)
 
         # Save fake images
         if epoch % self.config.save_interval == 0:
