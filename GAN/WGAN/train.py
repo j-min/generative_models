@@ -17,6 +17,7 @@ def main(config):
 
     solver.build()
     solver.train()
+    solver.plot()
 
 if __name__ == '__main__':
     # Get Configuration

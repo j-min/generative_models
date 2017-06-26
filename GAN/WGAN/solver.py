@@ -4,6 +4,10 @@ from torch.nn import init
 from torch.autograd import Variable
 from torchvision.utils import save_image
 
+import matplotlib.pyplot as plt
+import seaborn as sns
+from visdom import Visdom
+import numpy as np
 import os
 from tqdm import tqdm
 from models import Discriminator, Generator
@@ -49,6 +53,7 @@ class Solver(object):
         self.total_data_size = len(self.data_loader.dataset)
         self.is_train = is_train
 
+
     def build(self):
         """Build Networks, losses and optimizers(training only)
         if torch.cuda.is_available() is True => Use GPUs
@@ -74,6 +79,7 @@ class Solver(object):
                 # betas=(self.config.beta1, self.config.beta2))
 
     def d_weight_clamp(self):
+        """Clamp weights of Discriminator (K-Lipschitz condition)"""
         for p in self.D.parameters():
             p.data.clamp_(-self.config.w_clamp, self.config.w_clamp)
 
@@ -113,6 +119,45 @@ class Solver(object):
 
         return g_loss
 
+    def save_images(self, epoch, x, z):
+        """Save intermediate results for debugging"""
+
+        batch_size = x.size(0)
+
+        # Save real images (first epoch only)
+        if epoch == 1:
+            self.fixed_images = x # for debugging
+            self.fixed_noise = z # for debugging
+
+            real_images = self.fixed_images.view(batch_size, 1, 28, 28)
+            real_image_path = os.path.join(self.config.image_log_path, 'real_images.png')
+            print('Save real images at %s' % (real_image_path))
+            save_image(real_images.data, real_image_path)
+
+        # Save fake images
+        if epoch % self.config.save_interval == 0:
+            # fill zeros (ex. 1 => 001)
+            epoch = str(epoch).zfill(3)
+
+            fake_images = self.G(self.fixed_noise)
+            fake_images = fake_images.view(batch_size, 1, 28, 28).data
+            # fake_images = denorm(fake_images.data) # (-1, 1) => (0, 1)
+            fake_image_path = os.path.join(self.config.image_log_path, f'fake_images-{epoch}.png')
+            print(f'Save fake images at {fake_image_path}')
+            save_image(fake_images, fake_image_path)
+
+    def save_model(self, epoch):
+        """Save parameters at checkpoint"""
+
+        d_ckpt_path = os.path.join(self.config.save_dir, f'D_epoch-{epoch}.pkl')
+        print(f'Save parameters at {d_ckpt_path}')
+        torch.save(self.D.state_dict(), d_ckpt_path)
+
+        g_ckpt_path = os.path.join(self.config.save_dir, f'G_epoch-{epoch}.pkl')
+        print(f'Save parameters at {g_ckpt_path}\n')
+        torch.save(self.G.state_dict(), g_ckpt_path)
+
+
     def train(self):
         """Training Discriminator and Generator
 
@@ -137,6 +182,9 @@ class Solver(object):
         self.D.train()
         self.G.train()
 
+        self.D_loss_history = []
+        self.G_loss_history = []
+
         for epoch in tqdm(range(self.config.epochs)):
             epoch += 1
             epoch_d_loss = 0
@@ -153,11 +201,9 @@ class Solver(object):
                 #   Train Discriminator   #
                 ###########################
 
-                # Sampling noise from gaussian distribution
-                z = sample(batch_size, self.config.z_size)
-
                 for _ in range(self.config.d_n_iter):
-
+                    # Sampling noise from gaussian distribution
+                    z = sample(batch_size, self.config.z_size)
 
                     # Caculate Loss
                     d_loss, D_x, D_G_z = self.d_loss(x, z)
@@ -215,37 +261,16 @@ class Solver(object):
             average_epoch_g_loss = epoch_g_loss / self.total_data_size
             print(f'\nEpoch {epoch} | D Loss: {average_epoch_d_loss:.3f}')
             print(f'Epoch {epoch} | G Loss: {average_epoch_g_loss:.3f}\n')
+            self.D_loss_history.append(average_epoch_d_loss)
+            self.G_loss_history.append(average_epoch_g_loss)
 
-            # Save real images
-            if epoch == 1:
-                fixed_images = x # for debugging
-                fixed_noise = z # for debugging
+            self.visdom_plot(epoch, average_epoch_d_loss, average_epoch_g_loss)
 
-                images = x.view(batch_size, 1, 28, 28)
-                real_image_path = os.path.join(self.config.image_log_path, 'real_images.png')
-                print('Save real images at %s' % (real_image_path))
-                save_image(images.data, real_image_path)
+            # Save real / fake images at every config.save_interval epochs
+            self.save_images(epoch, x, z)
 
-            if epoch % self.config.save_interval == 0:
-                # fill zeros (ex. 1 => 001)
-                epoch = str(epoch).zfill(3)
-
-                # Save fake images
-                fake_images = self.G(fixed_noise)
-                fake_images = fake_images.view(batch_size, 1, 28, 28).data
-                # fake_images = denorm(fake_images.data) # (-1, 1) => (0, 1)
-                fake_image_path = os.path.join(self.config.image_log_path, f'fake_images-{epoch}.png')
-                print(f'Save fake images at {fake_image_path}')
-                save_image(fake_images, fake_image_path)
-
-                # Save parameters at checkpoint
-                d_ckpt_path = os.path.join(self.config.save_dir, f'D_epoch-{epoch}.pkl')
-                print(f'Save parameters at {d_ckpt_path}')
-                torch.save(self.D.state_dict(), d_ckpt_path)
-
-                g_ckpt_path = os.path.join(self.config.save_dir, f'G_epoch-{epoch}.pkl')
-                print(f'Save parameters at {g_ckpt_path}\n')
-                torch.save(self.G.state_dict(), g_ckpt_path)
+            # Save parameters at checkpoint
+            self.save_model(epoch)
 
     def eval(self):
 
@@ -283,3 +308,53 @@ class Solver(object):
 
         print(f'D Loss: {d_loss.data[0]:.3f}')
         print(f'G Loss: {g_loss.data[0]:.3f}\n')
+
+    def plot(self):
+        """plot learning curve with matplotlib + seaborn
+        X: Epoch
+        Y: D_loss, G_loss"""
+
+        fig_path = os.path.join(self.config.image_log_path, 'learning_curve.png')
+        fig = plt.figure(figsize=(20,8))
+        x = range(1, len(self.D_loss_history)+1)
+
+        with sns.axes_style('whitegrid'):
+            plt.plot(x, self.D_loss_history, label='Discriminator')
+            plt.plot(x, self.G_loss_history, label='Generator')
+            plt.title('Learning Curve')
+            plt.xlabel('Epoch')
+            plt.ylabel('Loss')
+            plt.legend(loc='best')
+            plt.xlim(1,)
+            fig.savefig(fig_path)
+
+    def visdom_plot(self, epoch, d_loss, g_loss):
+        """plot learning curve interactively with visdom
+        X: Epoch
+        Y: D_loss, G_loss"""
+
+        if epoch == 1:
+            self.vis = Visdom(env='WGAN')
+
+            self.win = self.vis.line(
+                X=np.array([epoch]),
+                Y=np.array([[d_loss, g_loss]]),
+                opts=dict(
+                    title='Learning Curve',
+                    xlabel='Epoch',
+                    ylabel='Loss',
+                    legend=['Discriminator', 'Generator'],
+                ))
+        else:
+            self.vis.updateTrace(
+                X=np.array([epoch]),
+                Y=np.array([d_loss]),
+                win=self.win,
+                name='Discriminator',
+            )
+            self.vis.updateTrace(
+                X=np.array([epoch]),
+                Y=np.array([g_loss]),
+                win=self.win,
+                name='Generator',
+            )
