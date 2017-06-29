@@ -3,7 +3,9 @@ from torchvision import transforms, datasets
 
 def mnist_data_loader(image_path, batch_size, train=True, num_workers=2):
     transform = transforms.Compose([
-        transforms.ToTensor()
+        transforms.ToTensor(),
+        # [0, 1] -> [-1, 1]
+        transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
     ])
 
     dataset = datasets.MNIST(image_path,
@@ -24,7 +26,7 @@ def get_data_loader(image_path, image_size, batch_size, num_workers=2):
         transforms.Scale(image_size),
         transforms.ToTensor(),
         # [0, 1] -> [-1, 1]
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
     ])
 
     dataset = datasets.ImageFolder(

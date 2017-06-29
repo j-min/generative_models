@@ -12,10 +12,10 @@ class TrainConfig(object):
         self.epochs = 10
 
         # Discriminator
-        self.d_learning_rate = 1e-4#3*1e-5
+        self.d_learning_rate = 1e-5#3*1e-5
 
         # Generator
-        self.g_learning_rate = 1e-4
+        self.g_learning_rate = 1e-5
 
         self.optimizer = optim.Adam
         self.beta1 = 0.9

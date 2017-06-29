@@ -104,8 +104,8 @@ class Solver(object):
 
     def g_loss(self, z, batch_size):
         """Loss for Generator
-        Original Loss: sum_i(log(1 - D(G(z_i))))
-        Modified Loss: sum_i(log(    D(G(z_i))))
+        Original Loss:   sum_i(log(1 - D(G(z_i))))
+        Modified Loss: - sum_i(log(    D(G(z_i))))
 
         Return:
             g_loss: [1]
@@ -231,7 +231,7 @@ class Solver(object):
                 # Save fake images
                 fake_images = self.G(fixed_noise)
                 fake_images = fake_images.view(batch_size, 1, 28, 28).data
-                # fake_images = denorm(fake_images.data) # (-1, 1) => (0, 1)
+                fake_images = denorm(fake_images) # (-1, 1) => (0, 1)
                 fake_image_path = os.path.join(self.config.image_log_path, 'fake_images-%d.png' % (epoch))
                 print('Save fake images at %s' % (fake_image_path))
                 save_image(fake_images, fake_image_path)

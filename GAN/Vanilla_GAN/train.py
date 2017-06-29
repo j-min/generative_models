@@ -31,7 +31,6 @@ if __name__ == '__main__':
 
     config = get_config(**kwargs)
 
-
     for path in [config.image_path, config.image_log_path, config.save_dir]:
         if not os.path.isdir(path):
             os.mkdir(path)
